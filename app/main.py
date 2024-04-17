@@ -2,10 +2,6 @@
 import socket
 import threading
 CRLF= "\r\n"
-def receive_client(conn):
-    pong = "+PONG\r\n"
-    while conn.recv(1024):
-        conn.send(pong.encode())
 
 
 def main():
@@ -18,8 +14,8 @@ def main():
      
     while True:
         conn, addr = server_socket.accept()
-        t1 = threading.Thread(target=receive_client, args=(conn,))
-        t2 = threading.Thread(target=receive_client, args=(conn,))
+        t1 = threading.Thread(target=handle_connection, args=(conn,))
+        t2 = threading.Thread(target=handle_connection, args=(conn,))
         t1.start()
         t2.start()
 def handle_connection(client_conn, client_addr):
