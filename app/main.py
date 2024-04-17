@@ -1,5 +1,10 @@
 # Uncomment this to pass the first stage
 import socket
+import threading
+def receive_client(conn):
+    pong = "+PONG\r\n"
+    while conn.recv(1024):
+        conn.send(pong.encode())
 
 
 def main():
@@ -11,10 +16,11 @@ def main():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
     conn, add = server_socket.accept()  # wait for client
     while True:
-        message = conn.recv(1024).decode()
-        if "ping" in message:
-            pong_string = "+PONG\r\n"
-            conn.send(pong_string.encode())
+        conn, addr = server_socket.accept()
+        t1 = threading.Thread(target=receive_client, args=(conn,))
+        t2 = threading.Thread(target=receive_client, args=(conn,))
+        t1.start()
+        t2.start()
 
 
 if __name__ == "__main__":
