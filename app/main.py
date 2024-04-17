@@ -14,7 +14,7 @@ def main():
     # Uncomment this to pass the first stage
     #
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    conn, add = server_socket.accept()  # wait for client
+     
     while True:
         conn, addr = server_socket.accept()
         t1 = threading.Thread(target=receive_client, args=(conn,))
