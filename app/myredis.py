@@ -1,4 +1,4 @@
-class MyRedis:
+"""class MyRedis:
     def __init__(self):
         self.db = {}
     def set_value(self, key, value):
@@ -7,4 +7,4 @@ class MyRedis:
     def get_value(self, key):
         print(self.db)
 
-        return self.db.get(key)
+        return self.db.get(key)"""
