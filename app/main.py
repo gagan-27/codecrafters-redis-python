@@ -1,51 +1,60 @@
-# Uncomment this to pass the first stage
 import socket
+from time import sleep
+
+from datetime import datetime, timedelta
 import threading
-from .myredis import MyRedis
-
-
-def main():
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!")
-    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    redis_db=MyRedis()
+setter = {}  # Dictionary to store key-value pairs
+def handle_connection(conn):
     while True:
-        client_conn, client_addr = server_socket.accept()
-        t = threading.Thread(target=handle_connection, args=[client_conn, redis_db])
-        t.start()
-def handle_connection(conn, redis_db):
-    while data := conn.recv(1024):
-        if b"ping" in data:
-            conn.sendall(b"+PONG\r\n")
-        elif b"echo" in data:
-            array_elems: list[str] = data.split(b"$")
-            for elem in array_elems:
-                if elem.startswith(b"*") or b"echo" in elem:
-                    continue
-                conn.sendall(b"$" + elem)
-        else:
-            if b"set" in data:
-                key = data.split()[4]
-                value = data.split()[6]
-                redis_db.set_value(key, value)
-                conn.sendall(b"+OK\r\n")
-            elif b"get" in data:
-                key = data.split()[4]
-                value = redis_db.get_value(key)
-                if key:
-                    conn.sendall(
-                        b"$" + str(len(value)).encode() + b"\r\n" + value + b"\r\n"
-                    )
-                else:
-                    conn.sendall(b"$-1\r\n")
-"""decoded_request = received_data.decode("utf-8").split(CRLF)
-    cleaned_data = [decoded_request[i] for i in range(2, len(decoded_request), 2)]
-    print(cleaned_data)
-    match cleaned_data[0].upper():
-        case "PING":
-            return b"+PONG\r\n"
-        case "ECHO":
+        decoded_data = conn.recv(8000).decode()
+        parts = decoded_data.strip().split("\r\n")
+        commands = parts[2]
 
-            return f"+{cleaned_data[1]}\r\n".encode()"""
+        expiry = ""
+        print(commands, "received command")
+        if commands.lower() == "echo":
+            print(f"Echo: {parts[4]}")
+            conn.send(f"+{parts[4]}\r\n".encode())
+        elif commands.lower() == "set":
+            print(f"parts: {parts}")
+            data = parts[4]
+            print(f"data: {data}")
+            key, value = parts[4], parts[6]
+            
+            setter[key] = (value,)
+            if len(parts) > 8 and parts[8].lower() == "px":
+                expiry = parts[10]
+                if expiry:
+                    setter[key] = (value, int(expiry), datetime.now())
+                else:
+
+                    setter[key] = (value,)
+            conn.send("+OK\r\n".encode())
+        elif commands.lower() == "get":
+            data = parts[4]
+            val = setter.get(data)
+            try:
+                if isinstance(val, tuple) and len(val) == 3:
+                    if datetime.now() > val[2] + timedelta(milliseconds=val[1]):
+                        del setter[key]
+                        print("$-1\r\n".encode())
+                        conn.send("$-1\r\n".encode())
+                    else:
+                        print(value)
+                        conn.send(f"+{val[0]}\r\n".encode())
+                else:
+                    print("NOT A TUPLE")
+                    conn.send(f"+{value}\r\n".encode())
+            except KeyError:
+                
+                conn.send("$-1\r\n".encode())
+        else:
+            conn.send("+PONG\r\n".encode())
+def main() -> None:
+    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
+    while True:
+        conn, addr = server_socket.accept()  # wait for client
+        connection_handler = threading.Thread(target=handle_connection, args=(conn,))
+        connection_handler.start()
 if __name__ == "__main__":
     main()
