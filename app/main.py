@@ -83,6 +83,12 @@ def execute_get(args):
         #     response = build_resp_protocal("$", val)
         # else:
         #     response = build_resp_protocal("$", none)
+def execute_info(args):
+    # info replication
+    # $11\r\nrole:master\r\n
+
+    return build_resp_protocal("$", "role:master")
+
 def threading_connect(conn) -> None:
     with conn:
         while True:
@@ -108,7 +114,8 @@ def threading_connect(conn) -> None:
                         
                     else:
                         response = build_resp_protocal("$", None)
-                        
+                elif cmd == "info":
+                    response=execute_info(args)       
                 else:
                     print("unknown command")
                 if response:
@@ -116,9 +123,7 @@ def threading_connect(conn) -> None:
             else:
                 break
 def parse_args():
-    if len(sys.argv) > 1:
-        for arg in sys.argv:
-            print(arg)
+    
     parser = argparse.ArgumentParser(description="Optional app description")
     parser.add_argument("--port", type=int, help="")
     args = parser.parse_args()
