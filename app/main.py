@@ -29,14 +29,14 @@ def parse_resp_protocal(resp_str):
     print("command: ", command)
     print("arguments: ", arguments)
     return command, arguments
-def build_resp_protocal(resp_data_type, response_str):
+def build_resp_protocal(resp_data_type, response_val):
     result = ""
     delimiter = "\r\n"
     if resp_data_type == "+":  # simple strings
-        result = resp_data_type + response_str + delimiter
+        result = resp_data_type + response_val + delimiter
     # $3\r\nhey\r\n
     elif resp_data_type == "$":  # bulk strings
-        if response_str:
+        if response_val:
             
             # print(response_str)
             # str_parts = response_str.split(MY_DELIMITER)
@@ -46,15 +46,27 @@ def build_resp_protocal(resp_data_type, response_str):
             #     result += str(len(x)) + delimiter + x + delimiter
             result = (
                 resp_data_type
-                + str(len(response_str))
+                + str(len(response_val))
                 + delimiter
-                + response_str
+                + response_val
                 + delimiter
             )
             print("result: ", result)
         else:
             # $-1\r\n
             result = resp_data_type + "-1" + delimiter
+    elif resp_data_type == "*":  # arrays
+        # *1\r\n$4\r\nping\r\n
+        # response_val should be an array
+        if response_val and len(response_val) > 0:
+            result = resp_data_type + str(len(response_val)) + delimiter
+            for x in response_val:
+                # $5\r\nhello\r\n
+                result += "$" + str(len(x)) + "\r\n" + x + "\r\n"
+        else:
+            result = resp_data_type + "0" + delimiter
+        pass
+    print("Build RESP Result: ", result)
     return result
 def execute_set(args):
     # redis-cli set foo bar px 100
@@ -160,6 +172,11 @@ def parse_args():
     # args = parser.parse_known_args(["--port", "--replicaof"])
     print(args)
     return args
+def connect_to_master(master_address):
+    master_socket = socket.create_connection(master_address)
+    resp_val = ["ping"]
+    resp = build_resp_protocal("*", resp_val)
+    master_socket.sendall(str.encode(resp))
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     # print("Logs from your program will appear here!")
@@ -172,6 +189,10 @@ def main():
     global is_master
     is_master = not parsed_args.replicaof if parsed_args.replicaof else True
     print("is_master: ", is_master)
+    if not is_master:
+        master_addr = (parsed_args.args[0], parsed_args.args[1])
+
+        connect_to_master(master_addr)
     server_socket = socket.create_server((host, port), reuse_port=True)
     print("socket is created")
     while True:
