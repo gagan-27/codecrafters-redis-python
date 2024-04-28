@@ -158,6 +158,8 @@ def threading_connect(conn) -> None:
                         response = build_resp_protocal("$", None)
                 elif cmd == "info":
                     response = execute_info(args)
+                elif cmd == "replconf":
+                    response = build_resp_protocal("+", "OK")
                 else:
                     print("unknown command")
                 if response:
