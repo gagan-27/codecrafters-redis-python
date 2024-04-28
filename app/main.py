@@ -13,6 +13,7 @@ SLAVE_ROLE = "slave"
 
 MY_DELIMITER = "\r\n"
 conn_lock = threading.Lock()
+my_port=6379
 redis_store = {}
 is_master = True
 def parse_resp_protocal(resp_str):
@@ -177,6 +178,20 @@ def connect_to_master(master_address):
     resp_val = ["ping"]
     resp = build_resp_protocal("*", resp_val)
     master_socket.sendall(str.encode(resp))
+    master_reply = master_socket.recv(1024)
+    print("master_reply after ping: ", master_reply.decode())
+    resp_val = ["REPLCONF", "listening-port", str(my_port)]
+    resp = build_resp_protocal("*", resp_val)
+    master_socket.sendall(str.encode(resp))
+    master_reply = master_socket.recv(1024)
+    print("master_reply after REPLCONF listening-port: ", master_reply.decode())
+    resp_val = ["REPLCONF", "capa", "psync2"]
+    resp = build_resp_protocal("*", resp_val)
+    master_socket.sendall(str.encode(resp))
+    master_reply = master_socket.recv(1024)
+    print("master_reply after REPLCONF capa: ", master_reply.decode())
+    master_socket.close()
+    
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     # print("Logs from your program will appear here!")
@@ -185,7 +200,8 @@ def main():
     host = "localhost"
     parsed_args = parse_args()
     print("args: ", parsed_args)
-    port = parsed_args.port if parsed_args.port else 6379
+    global my_port
+    my_port=parsed_args.port if parsed_args.port else 6379
     global is_master
     is_master = not parsed_args.replicaof if parsed_args.replicaof else True
     print("is_master: ", is_master)
@@ -193,7 +209,7 @@ def main():
         master_addr = (parsed_args.args[0], parsed_args.args[1])
 
         connect_to_master(master_addr)
-    server_socket = socket.create_server((host, port), reuse_port=True)
+    server_socket = socket.create_server((host, my_port), reuse_port=True)
     print("socket is created")
     while True:
         conn, addr = server_socket.accept()  # wait for client
