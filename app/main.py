@@ -1,5 +1,6 @@
 import socket
 from _thread import *
+import string
 import threading
 from datetime import datetime, timedelta
 import sys
@@ -9,8 +10,8 @@ EXPIRY_START_TIME = "expiry_start_time"
 EXPIRY_DURATION = "expiry_duration"
 MASTER_ROLE = "master"
 SLAVE_ROLE = "slave"
-MY_DELIMITER="\r\n"
 
+MY_DELIMITER = "\r\n"
 conn_lock = threading.Lock()
 redis_store = {}
 is_master = True
@@ -37,6 +38,12 @@ def build_resp_protocal(resp_data_type, response_str):
     elif resp_data_type == "$":  # bulk strings
         if response_str:
             
+            # print(response_str)
+            # str_parts = response_str.split(MY_DELIMITER)
+            # print("str_parts", str_parts)
+            # result = resp_data_type
+            # for x in str_parts:
+            #     result += str(len(x)) + delimiter + x + delimiter
             result = (
                 resp_data_type
                 + str(len(response_str))
@@ -60,7 +67,7 @@ def execute_set(args):
             val_dict = {
                 REDIS_STORE_VAL: args[1],
                 EXPIRY_START_TIME: datetime.now(),
-                EXPIRY_DURATION: idx,
+                EXPIRY_DURATION: args[idx + 1],
             }
             redis_store[args[0]] = val_dict
 def execute_get(args):
@@ -69,7 +76,7 @@ def execute_get(args):
     if val:
         pass
         if isinstance(val, dict):
-            print("val:",val)
+            print("val: ", val)
             if EXPIRY_START_TIME in val and EXPIRY_DURATION in val:
                 if (
                     val[EXPIRY_START_TIME]
@@ -83,7 +90,6 @@ def execute_get(args):
                 return val[REDIS_STORE_VAL]
         else:
             return val
-        #siddhu
     else:
         return None
         #    val = redis_store[args[0]]
@@ -94,6 +100,17 @@ def execute_get(args):
 def execute_info(args):
     # info replication
     # $11\r\nrole:master\r\n
+    # $ redis-cli info replication
+    # Replication
+    # role:master
+    # connected_slaves:0
+    # master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb
+    # master_repl_offset:0
+    # second_repl_offset:-1
+    # repl_backlog_active:0
+    # repl_backlog_size:1048576
+    # repl_backlog_first_byte_offset:0
+    # repl_backlog_histlen:
     role = MASTER_ROLE if is_master == True else SLAVE_ROLE
     replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
     master_repl_offset = 0
@@ -101,11 +118,9 @@ def execute_info(args):
     resp_str += "master_replid:" + replid + MY_DELIMITER
 
     resp_str += "master_repl_offset:" + str(master_repl_offset)
+    
     print("resp_str: ", resp_str)
     return build_resp_protocal("$", resp_str)
-
-    
-
 def threading_connect(conn) -> None:
     with conn:
         while True:
@@ -121,18 +136,15 @@ def threading_connect(conn) -> None:
                     response = build_resp_protocal("$", args[0])
                 elif cmd == "set":
                     execute_set(args)
-                    
                     response = build_resp_protocal("+", "OK")
                 elif cmd == "get":
-                    
                     val = execute_get(args)
                     if val:
                         response = build_resp_protocal("$", val)
-                        
                     else:
                         response = build_resp_protocal("$", None)
                 elif cmd == "info":
-                    response=execute_info(args)       
+                    response = execute_info(args)
                 else:
                     print("unknown command")
                 if response:
@@ -140,13 +152,11 @@ def threading_connect(conn) -> None:
             else:
                 break
 def parse_args():
-    
     parser = argparse.ArgumentParser(description="Optional app description")
     parser.add_argument("--port", type=int, required=False)
     parser.add_argument("--replicaof", action="store_true", required=False)
     parser.add_argument("args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    
     # args = parser.parse_known_args(["--port", "--replicaof"])
     print(args)
     return args
@@ -154,7 +164,7 @@ def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     # print("Logs from your program will appear here!")
     # Uncomment this to pass the first stage
-    print("original args: ",sys.argv)
+    print("original args: ", sys.argv)
     host = "localhost"
     parsed_args = parse_args()
     print("args: ", parsed_args)
@@ -162,8 +172,6 @@ def main():
     global is_master
     is_master = not parsed_args.replicaof if parsed_args.replicaof else True
     print("is_master: ", is_master)
-    
-    
     server_socket = socket.create_server((host, port), reuse_port=True)
     print("socket is created")
     while True:
@@ -175,3 +183,4 @@ def main():
     server_socket.close()
 if __name__ == "__main__":
     main()
+
