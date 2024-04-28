@@ -83,6 +83,7 @@ def execute_get(args):
                 return val[REDIS_STORE_VAL]
         else:
             return val
+        #siddhu
     else:
         return None
         #    val = redis_store[args[0]]
