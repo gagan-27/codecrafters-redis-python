@@ -1,3 +1,4 @@
+# Uncomment this to pass the first stage
 import socket
 from _thread import *
 import string
@@ -10,10 +11,9 @@ EXPIRY_START_TIME = "expiry_start_time"
 EXPIRY_DURATION = "expiry_duration"
 MASTER_ROLE = "master"
 SLAVE_ROLE = "slave"
-
 MY_DELIMITER = "\r\n"
 conn_lock = threading.Lock()
-my_port=6379
+my_port = 6379
 redis_store = {}
 is_master = True
 def parse_resp_protocal(resp_str):
@@ -38,13 +38,6 @@ def build_resp_protocal(resp_data_type, response_val):
     # $3\r\nhey\r\n
     elif resp_data_type == "$":  # bulk strings
         if response_val:
-            
-            # print(response_str)
-            # str_parts = response_str.split(MY_DELIMITER)
-            # print("str_parts", str_parts)
-            # result = resp_data_type
-            # for x in str_parts:
-            #     result += str(len(x)) + delimiter + x + delimiter
             result = (
                 resp_data_type
                 + str(len(response_val))
@@ -52,7 +45,6 @@ def build_resp_protocal(resp_data_type, response_val):
                 + response_val
                 + delimiter
             )
-            print("result: ", result)
         else:
             # $-1\r\n
             result = resp_data_type + "-1" + delimiter
@@ -129,9 +121,7 @@ def execute_info(args):
     master_repl_offset = 0
     resp_str = "role:" + role + MY_DELIMITER
     resp_str += "master_replid:" + replid + MY_DELIMITER
-
     resp_str += "master_repl_offset:" + str(master_repl_offset)
-    
     print("resp_str: ", resp_str)
     return build_resp_protocal("$", resp_str)
 def threading_connect(conn) -> None:
@@ -159,6 +149,7 @@ def threading_connect(conn) -> None:
                 elif cmd == "info":
                     response = execute_info(args)
                 elif cmd == "replconf":
+
                     response = build_resp_protocal("+", "OK")
                 else:
                     print("unknown command")
@@ -177,6 +168,7 @@ def parse_args():
     return args
 def connect_to_master(master_address):
     master_socket = socket.create_connection(master_address)
+    # send ping command
     resp_val = ["ping"]
     resp = build_resp_protocal("*", resp_val)
     master_socket.sendall(str.encode(resp))
@@ -196,10 +188,8 @@ def connect_to_master(master_address):
     resp = build_resp_protocal("*", resp_val)
     master_socket.sendall(str.encode(resp))
     master_reply = master_socket.recv(1024)
-
     print("master_reply after PSYNC", master_reply.decode())
     master_socket.close()
-    
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     # print("Logs from your program will appear here!")
@@ -209,13 +199,12 @@ def main():
     parsed_args = parse_args()
     print("args: ", parsed_args)
     global my_port
-    my_port=parsed_args.port if parsed_args.port else 6379
+    my_port = parsed_args.port if parsed_args.port else 6379
     global is_master
     is_master = not parsed_args.replicaof if parsed_args.replicaof else True
     print("is_master: ", is_master)
     if not is_master:
         master_addr = (parsed_args.args[0], parsed_args.args[1])
-
         connect_to_master(master_addr)
     server_socket = socket.create_server((host, my_port), reuse_port=True)
     print("socket is created")
