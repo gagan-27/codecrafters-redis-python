@@ -10,6 +10,7 @@ EXPIRY_DURATION = "expiry_duration"
 MASTER_ROLE = "master"
 SLAVE_ROLE = "slave"
 MY_DELIMITER="\r\n"
+
 conn_lock = threading.Lock()
 redis_store = {}
 is_master = True
@@ -99,7 +100,6 @@ def execute_info(args):
     resp_str += "master_replid:" + replid + MY_DELIMITER
 
     resp_str += "master_repl_offset:" + str(master_repl_offset)
-    resp_str = "role:" + role
     print("resp_str: ", resp_str)
     return build_resp_protocal("$", resp_str)
 
