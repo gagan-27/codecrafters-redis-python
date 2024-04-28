@@ -4,11 +4,14 @@ import threading
 from datetime import datetime, timedelta
 import sys
 import argparse
-conn_lock = threading.Lock()
-redis_store = {}
 REDIS_STORE_VAL = "val"
 EXPIRY_START_TIME = "expiry_start_time"
 EXPIRY_DURATION = "expiry_duration"
+MASTER_ROLE = "master"
+SLAVE_ROLE = "slave"
+conn_lock = threading.Lock()
+redis_store = {}
+is_master = True
 def parse_resp_protocal(resp_str):
     splited_txt = resp_str.split("\r\n")
     print(splited_txt)
@@ -63,10 +66,11 @@ def execute_get(args):
     if val:
         pass
         if isinstance(val, dict):
+            print("val:",val)
             if EXPIRY_START_TIME in val and EXPIRY_DURATION in val:
                 if (
                     val[EXPIRY_START_TIME]
-                    + timedelta(milliseconds=val[EXPIRY_DURATION])
+                    + timedelta(milliseconds=int(val[EXPIRY_DURATION]))
                 ) < datetime.now():
                     del redis_store[args[0]]
                     return None
@@ -86,8 +90,11 @@ def execute_get(args):
 def execute_info(args):
     # info replication
     # $11\r\nrole:master\r\n
+    role = MASTER_ROLE if is_master == True else SLAVE_ROLE
+    resp_str = "role:" + role
+    return build_resp_protocal("$", resp_str)
 
-    return build_resp_protocal("$", "role:master")
+    
 
 def threading_connect(conn) -> None:
     with conn:
@@ -125,20 +132,28 @@ def threading_connect(conn) -> None:
 def parse_args():
     
     parser = argparse.ArgumentParser(description="Optional app description")
-    parser.add_argument("--port", type=int, help="")
+    parser.add_argument("--port", type=int, required=False)
+    parser.add_argument("--replicaof", action="store_true", required=False)
+    parser.add_argument("args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    print(args.port)
-
+    
+    # args = parser.parse_known_args(["--port", "--replicaof"])
+    print(args)
     return args
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     # print("Logs from your program will appear here!")
     # Uncomment this to pass the first stage
+    print("original args: ",sys.argv)
     host = "localhost"
+    parsed_args = parse_args()
+    print("args: ", parsed_args)
+    port = parsed_args.port if parsed_args.port else 6379
+    global is_master
+    is_master = not parsed_args.replicaof if parsed_args.replicaof else True
+    print("is_master: ", is_master)
     
-    args = parse_args()
-
-    port = args.port if args.port else 6379
+    
     server_socket = socket.create_server((host, port), reuse_port=True)
     print("socket is created")
     while True:
