@@ -9,6 +9,7 @@ EXPIRY_START_TIME = "expiry_start_time"
 EXPIRY_DURATION = "expiry_duration"
 MASTER_ROLE = "master"
 SLAVE_ROLE = "slave"
+MY_DELIMITER="\r\n"
 conn_lock = threading.Lock()
 redis_store = {}
 is_master = True
@@ -34,7 +35,7 @@ def build_resp_protocal(resp_data_type, response_str):
     # $3\r\nhey\r\n
     elif resp_data_type == "$":  # bulk strings
         if response_str:
-            print(response_str)
+            
             result = (
                 resp_data_type
                 + str(len(response_str))
@@ -42,6 +43,7 @@ def build_resp_protocal(resp_data_type, response_str):
                 + response_str
                 + delimiter
             )
+            print("result: ", result)
         else:
             # $-1\r\n
             result = resp_data_type + "-1" + delimiter
@@ -91,7 +93,14 @@ def execute_info(args):
     # info replication
     # $11\r\nrole:master\r\n
     role = MASTER_ROLE if is_master == True else SLAVE_ROLE
+    replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+    master_repl_offset = 0
+    resp_str = "role:" + role + MY_DELIMITER
+    resp_str += "master_replid:" + replid + MY_DELIMITER
+
+    resp_str += "master_repl_offset:" + str(master_repl_offset)
     resp_str = "role:" + role
+    print("resp_str: ", resp_str)
     return build_resp_protocal("$", resp_str)
 
     
