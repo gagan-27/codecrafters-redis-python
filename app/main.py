@@ -190,6 +190,12 @@ def connect_to_master(master_address):
     master_socket.sendall(str.encode(resp))
     master_reply = master_socket.recv(1024)
     print("master_reply after REPLCONF capa: ", master_reply.decode())
+    resp_val = ["PSYNC", "?", "-1"]
+    resp = build_resp_protocal("*", resp_val)
+    master_socket.sendall(str.encode(resp))
+    master_reply = master_socket.recv(1024)
+
+    print("master_reply after PSYNC", master_reply.decode())
     master_socket.close()
     
 def main():
