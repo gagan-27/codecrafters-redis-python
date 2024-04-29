@@ -1,224 +1,162 @@
-# Uncomment this to pass the first stage
+import base64
+import random
+import select
 import socket
-from _thread import *
 import string
-import threading
-from datetime import datetime, timedelta
 import sys
-import argparse 
-
-REDIS_STORE_VAL = "val"
-EXPIRY_START_TIME = "expiry_start_time"
-EXPIRY_DURATION = "expiry_duration"
-MASTER_ROLE = "master"
-SLAVE_ROLE = "slave"
-MY_DELIMITER = "\r\n"
-conn_lock = threading.Lock()
-my_port = 6379
-replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
-master_repl_offset = 0
-redis_store = {}
-is_master = True
-def parse_resp_protocal(resp_str):
-    splited_txt = resp_str.split("\r\n")
-    print(splited_txt)
-    num_string = int(splited_txt[0][1])
-    count = 1
-    strs = []
-    while count < num_string * 2:
-        strs.append(splited_txt[count + 1])
-        count += 2
-    command = strs[0]
-    arguments = strs[1:]
-    print("command: ", command)
-    print("arguments: ", arguments)
-    return command, arguments
-def build_resp_protocal(resp_data_type, response_val):
-    result = ""
-    delimiter = "\r\n"
-    if resp_data_type == "+":  # simple strings
-        result = resp_data_type + response_val + delimiter
-    # $3\r\nhey\r\n
-    elif resp_data_type == "$":  # bulk strings
-        if response_val:
-            result = (
-                resp_data_type
-                + str(len(response_val))
-                + delimiter
-                + response_val
-                + delimiter
-            )
+import time
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, List, Optional
+class Role(Enum):
+    MASTER = "master"
+    SLAVE = "slave"
+@dataclass
+class Value:
+    v: any
+    ts: Optional[int] = None
+_kv: Dict[str, Value] = {}
+_role = None
+_replid = None
+_port = None
+_master_addr = None
+_master_port = None
+def handle_clients(read_sockets, all_sockets, server_socket):
+    for sock in read_sockets:
+        if sock == server_socket:
+            cs, _ = server_socket.accept()
+            all_sockets.append(cs)
+            print("accepted a new connection")
         else:
-            # $-1\r\n
-            result = resp_data_type + "-1" + delimiter
-    elif resp_data_type == "*":  # arrays
-        # *1\r\n$4\r\nping\r\n
-        # response_val should be an array
-        if response_val and len(response_val) > 0:
-            result = resp_data_type + str(len(response_val)) + delimiter
-            for x in response_val:
-                # $5\r\nhello\r\n
-                result += "$" + str(len(x)) + "\r\n" + x + "\r\n"
-        else:
-            result = resp_data_type + "0" + delimiter
-        pass
-    print("Build RESP Result: ", result)
-    return result
-def execute_set(args):
-    # redis-cli set foo bar px 100
-    if len(args) == 2:
-        redis_store[args[0]] = args[1]
-    elif len(args) > 2:
-        if "px" in map(str.lower, args):
-            tmp_list = [x.lower() for x in args]
-            idx = tmp_list.index("px")
-            val_dict = {
-                REDIS_STORE_VAL: args[1],
-                EXPIRY_START_TIME: datetime.now(),
-                EXPIRY_DURATION: args[idx + 1],
-            }
-            redis_store[args[0]] = val_dict
-def execute_get(args):
-    # get foo
-    val = redis_store[args[0]]
-    if val:
-        pass
-        if isinstance(val, dict):
-            print("val: ", val)
-            if EXPIRY_START_TIME in val and EXPIRY_DURATION in val:
-                if (
-                    val[EXPIRY_START_TIME]
-                    + timedelta(milliseconds=int(val[EXPIRY_DURATION]))
-                ) < datetime.now():
-                    del redis_store[args[0]]
-                    return None
+            try:
+                data = sock.recv(1024)
+                if not data:
+                    print("client disconnect")
+                    all_sockets.remove(sock)
+                    sock.close()
                 else:
-                    return val[REDIS_STORE_VAL]
-            else:
-                return val[REDIS_STORE_VAL]
-        else:
-            return val
-    else:
-        return None
-        #    val = redis_store[args[0]]
-        # if val:
-        #     response = build_resp_protocal("$", val)
-        # else:
-        #     response = build_resp_protocal("$", none)
-def execute_info(args):
-    # info replication
-    # $11\r\nrole:master\r\n
-    # $ redis-cli info replication
-    # Replication
-    # role:master
-    # connected_slaves:0
-    # master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb
-    # master_repl_offset:0
-    # second_repl_offset:-1
-    # repl_backlog_active:0
-    # repl_backlog_size:1048576
-    # repl_backlog_first_byte_offset:0
-    # repl_backlog_histlen:
-    role = MASTER_ROLE if is_master == True else SLAVE_ROLE
-    resp_str = "role:" + role + MY_DELIMITER
-    resp_str += "master_replid:" + replid + MY_DELIMITER
-    resp_str += "master_repl_offset:" + str(master_repl_offset)
-    print("resp_str: ", resp_str)
-    return build_resp_protocal("$", resp_str)
-def handle_cmd(conn) -> None:
-    with conn:
-        while True:
-            data = conn.recv(1024)
-            print("data received", data)
-            if data:
-                cmd, args = parse_resp_protocal(data.decode())
-                cmd = cmd.lower()
-                response = None
-                if cmd == "ping":
-                    response = build_resp_protocal("+", "PONG")
-                elif cmd == "echo":
-                    response = build_resp_protocal("$", args[0])
-                elif cmd == "set":
-                    execute_set(args)
-                    response = build_resp_protocal("+", "OK")
-                elif cmd == "get":
-                    val = execute_get(args)
-                    if val:
-                        response = build_resp_protocal("$", val)
-                    else:
-                        response = build_resp_protocal("$", None)
-                elif cmd == "info":
-                    response = execute_info(args)
-                elif cmd == "replconf":
-                    response = build_resp_protocal("+", "OK")
-                elif cmd == "psync":
-                    val = "FULLRESYNC" + " " + replid + " " + str(master_repl_offset)
-
-                    response = build_resp_protocal("+", val)
-                else:
-                    print("unknown command")
-                if response:
-                    conn.sendall(str.encode(response))
-            else:
-                break
-def parse_args():
-    parser = argparse.ArgumentParser(description="Optional app description")
-    parser.add_argument("--port", type=int, required=False)
-    parser.add_argument("--replicaof", action="store_true", required=False)
-    parser.add_argument("args", nargs=argparse.REMAINDER)
-    args = parser.parse_args()
-    # args = parser.parse_known_args(["--port", "--replicaof"])
-    print(args)
-    return args
-def connect_to_master(master_address):
-    master_socket = socket.create_connection(master_address)
-    # send ping command
-    resp_val = ["ping"]
-    resp = build_resp_protocal("*", resp_val)
-    master_socket.sendall(str.encode(resp))
-    master_reply = master_socket.recv(1024)
-    print("master_reply after ping: ", master_reply.decode())
-    resp_val = ["REPLCONF", "listening-port", str(my_port)]
-    resp = build_resp_protocal("*", resp_val)
-    master_socket.sendall(str.encode(resp))
-    master_reply = master_socket.recv(1024)
-    print("master_reply after REPLCONF listening-port: ", master_reply.decode())
-    resp_val = ["REPLCONF", "capa", "psync2"]
-    resp = build_resp_protocal("*", resp_val)
-    master_socket.sendall(str.encode(resp))
-    master_reply = master_socket.recv(1024)
-    print("master_reply after REPLCONF capa: ", master_reply.decode())
-    resp_val = ["PSYNC", "?", "-1"]
-    resp = build_resp_protocal("*", resp_val)
-    master_socket.sendall(str.encode(resp))
-    master_reply = master_socket.recv(1024)
-    #print("master_reply after PSYNC", master_reply.decode())
-    master_socket.close()
+                    handle_req(sock, data.decode())
+            except socket.error as e:
+                print(f"Socket error: {e}")
+                all_sockets.remove(sock)
+                sock.close()
 def main():
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    # print("Logs from your program will appear here!")
-    # Uncomment this to pass the first stage
-    print("original args: ", sys.argv)
-    host = "localhost"
-    parsed_args = parse_args()
-    print("args: ", parsed_args)
-    global my_port
-    my_port = parsed_args.port if parsed_args.port else 6379
-    global is_master
-    is_master = not parsed_args.replicaof if parsed_args.replicaof else True
-    print("is_master: ", is_master)
-    if not is_master:
-        master_addr = (parsed_args.args[0], parsed_args.args[1])
-        connect_to_master(master_addr)
-    server_socket = socket.create_server((host, my_port), reuse_port=True)
-    print("socket is created")
+    if _role == Role.SLAVE:
+        cs = socket.socket()
+        cs.connect((_master_addr, _master_port))
+        try:
+            cs.sendall("*1\r\n$4\r\nping\r\n".encode())
+            # wait for pong
+            res = cs.recv(1024).decode()
+            assert "pong" in res.lower(), "Should get pong"
+            # send two REPLCONF
+            cs.sendall(
+                encode_array(["REPLCONF", "listening-port", str(_port)]).encode()
+            )
+            res = cs.recv(1024).decode()
+            assert res == "+OK\r\n"
+            cs.sendall(encode_array(["REPLCONF", "capa", "psync2"]).encode())
+            res = cs.recv(1024).decode()
+            assert res == "+OK\r\n"
+            cs.sendall(encode_array(["PSYNC", "?", "-1"]).encode())
+            # TODO: decoding issue
+            res = cs.recv(1024)
+            # print(res[1:-2].split(" "))
+        finally:
+            cs.close()
+    server_socket = socket.create_server(
+        ("localhost", _port), backlog=5, reuse_port=True
+    )
+    all_sockets = [server_socket]
     while True:
-        conn, addr = server_socket.accept()  # wait for client
-        # conn_lock.acquire()
-        print("Connectd to :", addr[0], ":", addr[1])
-        start_new_thread(handle_cmd, (conn,))
-        # conn_lock.release()
-    server_socket.close()
+        read_sockets, _, _ = select.select(all_sockets, [], [])
+        handle_clients(read_sockets, all_sockets, server_socket)
+def encode_array(v: List[str]) -> str:
+    prefix = f"*{len(v)}\r\n"
+    suffix = "".join([bulk_string(e) for e in v])
+    return f"{prefix}{suffix}"
+def bulk_string(v: str):
+    return f"${len(v)}\r\n{v}\r\n"
+def null_bulk_string():
+    return "$-1\r\n"
+def ts_ms():
+    return int(round(time.time() * 1000))
+
+def handle_req(sock, req: str) -> List[str]:
+    r = req.split("\r\n")
+    assert r[0][0] == "*", "req is array"
+    match r[2].lower():
+        case "ping":
+            
+            sock.sendall("+PONG\r\n".encode())
+        case "echo":
+            v = r[4]
+            sock.sendall(bulk_string(v).encode())
+        case "set":
+            k = r[4]
+            v = r[6]
+            if len(r) > 8:
+                assert r[8].lower() == "px", "Only px option supported now."
+                expire_ts = int(r[10]) + ts_ms()
+            else:
+                expire_ts = None
+            _kv[k] = Value(v=v, ts=expire_ts)
+            
+            sock.sendall("+OK\r\n".encode())
+        case "get":
+            k = r[4]
+            v = _kv.get(k, None)
+            get_return = null_bulk_string()
+            if v is not None:
+                if v.ts is None or ts_ms() < v.ts:
+                    
+                    get_return = bulk_string(v.v)
+            sock.sendall(get_return.encode())
+        case "info":
+            assert r[4].lower() == "replication"
+            d = {"role": _role.value}
+            if _role == Role.MASTER:
+                d["master_replid"] = _replid
+                d["master_repl_offset"] = 0
+            res = "\n".join([f"{k}:{v}" for k, v in d.items()])
+            sock.sendall(bulk_string(res).encode())
+        case "replconf":
+            
+            sock.sendall("+OK\r\n".encode())
+        case "psync":
+            
+            sock.sendall(f"+FULLRESYNC {_replid} 0\r\n".encode())
+
+            rdb_msg = f"${len(_rdb_content)}\r\n"
+            sock.sendall(rdb_msg.encode() + _rdb_content)
+        case cmd:
+            raise RuntimeError(f"{cmd} is not supported yet.")
+def get_port():
+    if "--port" in sys.argv:
+        idx = sys.argv.index("--port")
+        port = int(sys.argv[idx + 1])
+    else:
+        port = 6379
+    return port
+def get_role():
+    if "--replicaof" in sys.argv:
+        idx = sys.argv.index("--replicaof")
+        addr, port = sys.argv[idx + 1], int(sys.argv[idx + 2])
+        return Role.SLAVE, addr, port
+    else:
+        return Role.MASTER, None, None
+def get_replid():
+    chrs = string.ascii_letters + string.digits
+    return "".join(random.choices(chrs, k=40))
 if __name__ == "__main__":
+    role, _master_addr, _master_port = get_role()
+    _role = role
+    _port = get_port()
+    _rdb_content = base64.b64decode(
+        "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
+
+    )
+    if _role == Role.MASTER:
+        _replid = get_replid()
     main()
 
