@@ -1,6 +1,6 @@
 import base64
 import random
-import select
+
 import socket
 import string
 import threading
@@ -8,7 +8,7 @@ import sys
 import time
 from dataclasses import dataclass
 from enum import Enum
-from threading import Thread
+
 from typing import Dict, List, Optional
 from app.resp import RespHandler
 class Role(Enum):
@@ -58,7 +58,11 @@ def handle_msg(sock, state):
             case "ping":
                 sock.sendall("+PONG\r\n".encode())
             case "replconf":
-                sock.sendall("+OK\r\n".encode())
+                if state.role == Role.SLAVE:
+                    if cmds[1].lower() == "getack":
+                        sock.sendall(encode_array(["REPLCONF", "ACK", "0"]).encode())
+                else:
+                    sock.sendall("+OK\r\n".encode())
             case "psync":
                 sock.sendall(f"+FULLRESYNC {state.replid} 0\r\n".encode())
                 rdb_msg = f"${len(state.rdb_content)}\r\n"
@@ -246,16 +250,12 @@ def get_replid():
     chrs = string.ascii_letters + string.digits
     return "".join(random.choices(chrs, k=40))
 if __name__ == "__main__":
-    role, master_addr, master_port = get_role()
-    _state.role = role
-    _state.master_addr = master_addr
-    _state.master_port = master_port
+    _state.role, _state.master_addr, _state.master_port = get_role()
     _state.port = get_port()
-    rdb_content = base64.b64decode(
-        "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
+    _state.rdb_content = base64.b64decode(    "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
     )
     _state.rdb_content = rdb_content
-    if role == Role.MASTER:
+    if _state.role == Role.MASTER:
         replid = get_replid()
         _state.replid = replid
     main() #ggwp
