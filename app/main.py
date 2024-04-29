@@ -5,36 +5,10 @@ import socket
 import string
 import threading
 import sys
-import time
-from dataclasses import dataclass
-from enum import Enum
-#done baby
-from typing import Dict, List, Optional
+from app import master_handler, slave_handler, slave_replication_handler
+from app.common import Role, State, encode_array
 from app.resp import RespHandler
-class Role(Enum):
-    MASTER = "master"
-    SLAVE = "slave"
-@dataclass
-class Value:
-    v: any
-    ts: Optional[int] = None
-class State:
-    def __init__(self):
-        self.kv: Dict[str, Value] = {}
-        self.role = None
-        # only for master
-        self.replid = None
-        self.port = None
-        # only for slave
-        self.master_addr = None
-        # only for slave
-        self.master_port = None
-        self.repl_socks = []
-        self.sock_handler_map = {}
-        self.threads = []
-        self.slave_offset = 0
 
-        self.lock = threading.Lock()
 _state = State()
 def handle_new_client(server_socket, state):
     while True:
@@ -42,11 +16,13 @@ def handle_new_client(server_socket, state):
         with state.lock:
             state.sock_handler_map[cs] = RespHandler(cs)
             print("Start a new thread for new connection")
-            t = threading.Thread(target=handle_msg, args=(cs, state))
-            t.start()
+            if state.role == Role.MASTER:
+                t = threading.Thread(target=master_handler.handle_msg, args=(cs, state))
+            else:
+                t = threading.Thread(target=slave_handler.handle_msg, args=(cs, state))t.start()
 
             state.threads.append(t)
-def handle_msg(sock, state, for_replica=False):
+"""def handle_msg(sock, state, for_replica=False):
     with state.lock:
         handler = state.sock_handler_map[sock]
     while True:
@@ -143,17 +119,20 @@ def handle_msg(sock, state, for_replica=False):
 #             except socket.error as e:
 #                 print(f"Socket error: {e}")
 #                 all_sockets.remove(sock)
-#                 sock.close()
+#                 sock.close()"""
 def main():
     server_socket = socket.create_server(
         ("localhost", _state.port), backlog=5, reuse_port=True
     )
     with _state.lock:
         _state.sock_handler_map[server_socket] = RespHandler(server_socket)
-        t = threading.Thread(target=handle_new_client, args=(server_socket, _state))
-        t.start()
-
-        _state.threads.append(t)
+        t1 = threading.Thread(target=handle_new_client, args=(server_socket, _state))
+        t1.start()
+        _state.threads.append(t1)
+        if _state.role == Role.MASTER:
+            t2 = threading.Thread(target=master_handler.handle_waits, args=(_state,))
+            t2.start()
+            _state.threads.append(t2)
     if _state.role == Role.SLAVE:
         cs = socket.socket()
         rh = RespHandler(cs)
@@ -183,72 +162,14 @@ def main():
         print(f"rdb_file_length {rdb_file_length}")
         _rdb_file = rh.extract_by_length(rdb_file_length, eat_crlf=False)
         print(f"Handshake with master is done. RDB file length: {len(_rdb_file)}")
-        t = threading.Thread(target=handle_msg, args=(cs, _state,True))
+        t = threading.Thread(
+            target=slave_replication_handler.handle_msg, args=(cs, _state)
+        )
         t.start()
         with _state.lock:
 
             _state.threads.append(t)
-def encode_array(v: List[str]) -> str:
-    prefix = f"*{len(v)}\r\n"
-    suffix = "".join([bulk_string(e) for e in v])
-    return f"{prefix}{suffix}"
 
-def bulk_string(v: str | bytearray):
-
-    return f"${len(v)}\r\n{v}\r\n"
-def null_bulk_string():
-    return "$-1\r\n"
-def ts_ms():
-    return int(round(time.time() * 1000))
-# def handle_req(sock, req: str) -> List[str]:
-#     global _repl_socks
-#     r = req.split("\r\n")
-#     assert r[0][0] == "*", "req is array"
-#     match r[2].lower():
-#         case "ping":
-#             sock.sendall("+PONG\r\n".encode())
-#         case "echo":
-#             v = r[4]
-#             sock.sendall(bulk_string(v).encode())
-#         case "set":
-#             k = r[4]
-#             v = r[6]
-#             if len(r) > 8:
-#                 assert r[8].lower() == "px", "Only px option supported now."
-#                 expire_ts = int(r[10]) + ts_ms()
-#             else:
-#                 expire_ts = None
-#             _kv[k] = Value(v=v, ts=expire_ts)
-#             if len(_repl_socks) > 0:
-#                 for slave in _repl_socks:
-#                     slave.sendall(req.encode())
-#             sock.sendall("+OK\r\n".encode())
-#         case "get":
-#             k = r[4]
-#             v = _kv.get(k, None)
-#             get_return = null_bulk_string()
-#             if v is not None:
-#                 if v.ts is None or ts_ms() < v.ts:
-#                     get_return = bulk_string(v.v)
-#             sock.sendall(get_return.encode())
-#         case "info":
-#             assert r[4].lower() == "replication"
-#             d = {"role": _role.value}
-#             if _role == Role.MASTER:
-#                 d["master_replid"] = _replid
-#                 d["master_repl_offset"] = 0
-#             res = "\n".join([f"{k}:{v}" for k, v in d.items()])
-#             sock.sendall(bulk_string(res).encode())
-#         case "replconf":
-#             sock.sendall("+OK\r\n".encode())
-#         case "psync":
-#             sock.sendall(f"+FULLRESYNC {_replid} 0\r\n".encode())
-#             rdb_msg = f"${len(_rdb_content)}\r\n"
-#             sock.sendall(rdb_msg.encode() + _rdb_content)
-#             # Start to track replica
-#             _repl_socks.append(sock)
-#         case cmd:
-#             raise RuntimeError(f"{cmd} is not supported yet.")
 def get_port():
     if "--port" in sys.argv:
         idx = sys.argv.index("--port")
