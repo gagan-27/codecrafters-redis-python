@@ -258,6 +258,6 @@ if __name__ == "__main__":
     if role == Role.MASTER:
         replid = get_replid()
         _state.replid = replid
-    main()
+    main() #ggwp
 
     _state.threads[0].join()
