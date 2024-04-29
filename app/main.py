@@ -87,12 +87,12 @@ def handle_msg(sock, state, for_replica=False):
                     expire_ts = None
                 with state.lock:
                     state.kv[k] = Value(v=v, ts=expire_ts)
-                    iif state.role == Role.MASTER:
-                    with state.lock:
-                        if len(state.repl_socks) > 0:
-                            for slave in state.repl_socks:
-                                slave.sendall(encode_array(cmds).encode())
-                    sock.sendall("+OK\r\n".encode())
+                    if state.role == Role.MASTER:
+                        with state.lock:
+                            if len(state.repl_socks) > 0:
+                                for slave in state.repl_socks:
+                                    slave.sendall(encode_array(cmds).encode())
+                        sock.sendall("+OK\r\n".encode())
             case "get":
                 k = cmds[1]
                 with state.lock:
