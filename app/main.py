@@ -6,7 +6,7 @@ import threading
 from datetime import datetime, timedelta
 import sys
 import argparse 
-#gg
+
 REDIS_STORE_VAL = "val"
 EXPIRY_START_TIME = "expiry_start_time"
 EXPIRY_DURATION = "expiry_duration"
@@ -15,6 +15,8 @@ SLAVE_ROLE = "slave"
 MY_DELIMITER = "\r\n"
 conn_lock = threading.Lock()
 my_port = 6379
+replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+master_repl_offset = 0
 redis_store = {}
 is_master = True
 def parse_resp_protocal(resp_str):
@@ -118,14 +120,12 @@ def execute_info(args):
     # repl_backlog_first_byte_offset:0
     # repl_backlog_histlen:
     role = MASTER_ROLE if is_master == True else SLAVE_ROLE
-    replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
-    master_repl_offset = 0
     resp_str = "role:" + role + MY_DELIMITER
     resp_str += "master_replid:" + replid + MY_DELIMITER
     resp_str += "master_repl_offset:" + str(master_repl_offset)
     print("resp_str: ", resp_str)
     return build_resp_protocal("$", resp_str)
-def threading_connect(conn) -> None:
+def handle_cmd(conn) -> None:
     with conn:
         while True:
             data = conn.recv(1024)
@@ -150,8 +150,11 @@ def threading_connect(conn) -> None:
                 elif cmd == "info":
                     response = execute_info(args)
                 elif cmd == "replconf":
-
                     response = build_resp_protocal("+", "OK")
+                elif cmd == "psync":
+                    val = "FULLRESYNC" + " " + replid + " " + str(master_repl_offset)
+
+                    response = build_resp_protocal("+", val)
                 else:
                     print("unknown command")
                 if response:
@@ -189,7 +192,7 @@ def connect_to_master(master_address):
     resp = build_resp_protocal("*", resp_val)
     master_socket.sendall(str.encode(resp))
     master_reply = master_socket.recv(1024)
-    print("master_reply after PSYNC", master_reply.decode())
+    #print("master_reply after PSYNC", master_reply.decode())
     master_socket.close()
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -213,7 +216,7 @@ def main():
         conn, addr = server_socket.accept()  # wait for client
         # conn_lock.acquire()
         print("Connectd to :", addr[0], ":", addr[1])
-        start_new_thread(threading_connect, (conn,))
+        start_new_thread(handle_cmd, (conn,))
         # conn_lock.release()
     server_socket.close()
 if __name__ == "__main__":
