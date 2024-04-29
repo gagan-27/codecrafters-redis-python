@@ -21,7 +21,7 @@ _replid = None
 _port = None
 _master_addr = None
 _master_port = None
-_repl_socks = None
+_repl_socks = []
 def handle_clients(read_sockets, all_sockets, server_socket):
     for sock in read_sockets:
         if sock == server_socket:
