@@ -21,6 +21,7 @@ _replid = None
 _port = None
 _master_addr = None
 _master_port = None
+_slave_sock = None
 def handle_clients(read_sockets, all_sockets, server_socket):
     for sock in read_sockets:
         if sock == server_socket:
@@ -44,26 +45,21 @@ def main():
     if _role == Role.SLAVE:
         cs = socket.socket()
         cs.connect((_master_addr, _master_port))
-        try:
-            cs.sendall("*1\r\n$4\r\nping\r\n".encode())
-            # wait for pong
-            res = cs.recv(1024).decode()
-            assert "pong" in res.lower(), "Should get pong"
-            # send two REPLCONF
-            cs.sendall(
-                encode_array(["REPLCONF", "listening-port", str(_port)]).encode()
-            )
-            res = cs.recv(1024).decode()
-            assert res == "+OK\r\n"
-            cs.sendall(encode_array(["REPLCONF", "capa", "psync2"]).encode())
-            res = cs.recv(1024).decode()
-            assert res == "+OK\r\n"
-            cs.sendall(encode_array(["PSYNC", "?", "-1"]).encode())
-            # TODO: decoding issue
-            res = cs.recv(1024)
-            # print(res[1:-2].split(" "))
-        finally:
-            cs.close()
+        cs.sendall("*1\r\n$4\r\nping\r\n".encode())
+        # wait for pong
+        res = cs.recv(1024).decode()
+        assert "pong" in res.lower(), "Should get pong"
+        # send two REPLCONF
+        cs.sendall(encode_array(["REPLCONF", "listening-port", str(_port)]).encode())
+        res = cs.recv(1024).decode()
+        assert res == "+OK\r\n"
+        cs.sendall(encode_array(["REPLCONF", "capa", "psync2"]).encode())
+        res = cs.recv(1024).decode()
+        assert res == "+OK\r\n"
+        cs.sendall(encode_array(["PSYNC", "?", "-1"]).encode())
+        # TODO: decoding issue
+        res = cs.recv(1024)
+        # print(res[1:-2].split(" "))
     server_socket = socket.create_server(
         ("localhost", _port), backlog=5, reuse_port=True
     )
@@ -83,6 +79,8 @@ def ts_ms():
     return int(round(time.time() * 1000))
 
 def handle_req(sock, req: str) -> List[str]:
+    # TODO: Avoid global
+    global _slave_sock
     r = req.split("\r\n")
     assert r[0][0] == "*", "req is array"
     match r[2].lower():
@@ -101,7 +99,8 @@ def handle_req(sock, req: str) -> List[str]:
             else:
                 expire_ts = None
             _kv[k] = Value(v=v, ts=expire_ts)
-            
+            if _slave_sock is not None:
+                _slave_sock.sendall(req.encode())
             sock.sendall("+OK\r\n".encode())
         case "get":
             k = r[4]
@@ -129,6 +128,7 @@ def handle_req(sock, req: str) -> List[str]:
 
             rdb_msg = f"${len(_rdb_content)}\r\n"
             sock.sendall(rdb_msg.encode() + _rdb_content)
+            _slave_sock = sock
         case cmd:
             raise RuntimeError(f"{cmd} is not supported yet.")
 def get_port():
