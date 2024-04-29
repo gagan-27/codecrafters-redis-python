@@ -254,7 +254,7 @@ if __name__ == "__main__":
     _state.port = get_port()
     _state.rdb_content = base64.b64decode(    "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
     )
-    _state.rdb_content = rdb_content
+    
     if _state.role == Role.MASTER:
         replid = get_replid()
         _state.replid = replid
