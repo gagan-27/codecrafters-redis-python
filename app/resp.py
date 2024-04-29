@@ -3,7 +3,7 @@ class RespHandler:
     def __init__(self, sock):
         self.buf = bytearray()
         self.sock = sock
-    # Array of string, or string(either simple or bulk)
+    # hArray of string, or string(either simple or bulk)
     def extract_by_target(self, target=b"\r\n"):
         while target not in self.buf:
             extra = self.sock.recv(1024)
@@ -50,5 +50,5 @@ class RespHandler:
                 data_arr.append(v)
             return data_arr
         else:
-
+#ggwp
             raise ValueError(f"wrong {self.buf.decode()}")
