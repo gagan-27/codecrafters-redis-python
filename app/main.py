@@ -18,7 +18,8 @@ def handle_new_client(server_socket, state):
             if state.role == Role.MASTER:
                 t = threading.Thread(target=master_handler.handle_msg, args=(cs, state))
             else:
-                t = threading.Thread(target=slave_handler.handle_msg, args=(cs, state))t.start()
+                t = threading.Thread(target=slave_handler.handle_msg, args=(cs, state))
+                t.start()
 
             state.threads.append(t)
 def main():
