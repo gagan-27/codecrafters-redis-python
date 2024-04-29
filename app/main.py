@@ -54,7 +54,7 @@ def handle_msg(sock, state, for_replica=False):
         msg_len = handler.last_msg_len()
         # hacky, could be binary
         cmds = [cmd.decode() for cmd in cmds]
-        print("next msg:", cmds,"len: ", msg_len)
+        print("next msg:", cmds, "len: ", msg_len)
         match cmds[0].lower():
             case "ping":
                 if not for_replica:
