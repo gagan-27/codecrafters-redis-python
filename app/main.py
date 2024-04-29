@@ -32,6 +32,7 @@ class State:
         self.repl_socks = []
         self.sock_handler_map = {}
         self.threads = []
+        self.slave_offset = 0
 
         self.lock = threading.Lock()
 _state = State()
@@ -45,31 +46,37 @@ def handle_new_client(server_socket, state):
             t.start()
 
             state.threads.append(t)
-def handle_msg(sock, state):
+def handle_msg(sock, state, for_replica=False):
     with state.lock:
         handler = state.sock_handler_map[sock]
     while True:
-        print("for next msg")
         cmds = handler.next_msg()
+        msg_len = handler.last_msg_len()
         # hacky, could be binary
         cmds = [cmd.decode() for cmd in cmds]
-        print("next msg:", cmds)
+        print("next msg:", cmds,"len: ", msg_len)
         match cmds[0].lower():
             case "ping":
-                sock.sendall("+PONG\r\n".encode())
+                if not for_replica:
+                    sock.sendall("+PONG\r\n".encode())
             case "replconf":
                 if state.role == Role.SLAVE:
                     if cmds[1].lower() == "getack":
-                        sock.sendall(encode_array(["REPLCONF", "ACK", "0"]).encode())
+                        sock.sendall(
+                            encode_array(
+                                ["REPLCONF", "ACK", str(state.slave_offset)]
+                            ).encode()
+                        )
                 else:
                     sock.sendall("+OK\r\n".encode())
             case "psync":
-                sock.sendall(f"+FULLRESYNC {state.replid} 0\r\n".encode())
-                rdb_msg = f"${len(state.rdb_content)}\r\n"
-                sock.sendall(rdb_msg.encode() + state.rdb_content)
-                # Start to track replica
-                with state.lock:
-                    state.repl_socks.append(sock)
+                if state.role == Role.MASTER:
+                    sock.sendall(f"+FULLRESYNC {state.replid} 0\r\n".encode())
+                    rdb_msg = f"${len(state.rdb_content)}\r\n"
+                    sock.sendall(rdb_msg.encode() + state.rdb_content)
+                    # Start to track replica
+                    with state.lock:
+                        state.repl_socks.append(sock)
             case "set":
                 k = cmds[1]
                 v = cmds[2]
@@ -80,10 +87,12 @@ def handle_msg(sock, state):
                     expire_ts = None
                 with state.lock:
                     state.kv[k] = Value(v=v, ts=expire_ts)
-                    if len(state.repl_socks) > 0:
-                        for slave in state.repl_socks:
-                            slave.sendall(encode_array(cmds).encode())
-                sock.sendall("+OK\r\n".encode())
+                    iif state.role == Role.MASTER:
+                    with state.lock:
+                        if len(state.repl_socks) > 0:
+                            for slave in state.repl_socks:
+                                slave.sendall(encode_array(cmds).encode())
+                    sock.sendall("+OK\r\n".encode())
             case "get":
                 k = cmds[1]
                 with state.lock:
@@ -94,19 +103,22 @@ def handle_msg(sock, state):
                         get_return = bulk_string(v.v)
                 sock.sendall(get_return.encode())
             case "info":
-                assert cmds[1].lower() == "replication"
-                d = {"role": state.role.value}
-                if state.role == Role.MASTER:
-                    d["master_replid"] = state.replid
-                    d["master_repl_offset"] = 0
-                res = "\n".join([f"{k}:{v}" for k, v in d.items()])
-                sock.sendall(bulk_string(res).encode())
+                if not for_replica:
+                    assert cmds[1].lower() == "replication"
+                    d = {"role": state.role.value}
+                    if state.role == Role.MASTER:
+                        d["master_replid"] = state.replid
+                        d["master_repl_offset"] = 0
+                    res = "\n".join([f"{k}:{v}" for k, v in d.items()])
+                    sock.sendall(bulk_string(res).encode())
             case "echo":
-                v = cmds[1]
-                sock.sendall(bulk_string(v).encode())
-
+                if state.role == Role.MASTER:
+                    v = cmds[1]
+                    sock.sendall(bulk_string(v).encode())
             case cmd:
                 raise RuntimeError(f"{cmd} is not supported yet.")
+
+        state.slave_offset += msg_len
 # def handle_clients(read_sockets, all_sockets, server_socket):
 #     for sock in read_sockets:
 #         if sock == server_socket:
@@ -166,7 +178,7 @@ def main():
         print(f"rdb_file_length {rdb_file_length}")
         _rdb_file = rh.extract_by_length(rdb_file_length, eat_crlf=False)
         print(f"Handshake with master is done. RDB file length: {len(_rdb_file)}")
-        t = threading.Thread(target=handle_msg, args=(cs, _state))
+        t = threading.Thread(target=handle_msg, args=(cs, _state,True))
         t.start()
         with _state.lock:
 
