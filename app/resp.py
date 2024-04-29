@@ -3,7 +3,7 @@ class RespHandler:
     def __init__(self, sock):
         self.buf = bytearray()
         self.sock = sock
-        self.msg_len = 0
+        self.msg_len = 0 #kbckbc
     # hArray of string, or string(either simple or bulk)
     def extract_by_target(self, target=b"\r\n"):
         while target not in self.buf:
