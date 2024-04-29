@@ -77,6 +77,11 @@ def handle_msg(sock, state, for_replica=False):
                     # Start to track replica
                     with state.lock:
                         state.repl_socks.append(sock)
+            case "wait":
+                if state.role == Role.MASTER:
+                    with state.lock:
+
+                        sock.sendall(f":{len(state.repl_socks)}\r\n".encode())
             case "set":
                 k = cmds[1]
                 v = cmds[2]
