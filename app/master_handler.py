@@ -8,7 +8,9 @@ from app.common import (
     bulk_string, #bc
     encode_array,
     null_bulk_string,
+    simple_error,
     simple_string,
+    stream_entry_key_func,
     ts_ms,
 )
 def handle_waits(state):
@@ -154,10 +156,28 @@ def handle_msg(sock: socket.socket, state: State):
             case "xadd":
                 sk = cmds[1]
                 eid = cmds[2]
+                if not stream_entry_key_func(eid) > (0, 0):
+                    sock.sendall(
+                        simple_error(
+                            "ERR The ID specified in XADD must be greater than 0-0"
+                        ).encode()
+                    )
+                    continue
                 with state.lock:
                     if sk not in state.skv:
                         state.skv[sk] = {}
-                    state.skv[sk][eid] = {}
+                        state.skv[sk][eid] = {}
+                    else:
+                        # if existed key, check entryID
+                        latest = max(state.skv[sk].keys(), key=stream_entry_key_func)
+                        if stream_entry_key_func(eid) <= stream_entry_key_func(latest):
+                            sock.sendall(
+                                simple_error(
+                                    "ERR The ID specified in XADD is equal or smaller than the target stream top item"
+                                ).encode()
+                            )
+                            continue
+                        state.skv[sk][eid] = {}
                     for k, v in zip(cmds[3::2], cmds[4::2]):
                         state.skv[sk][eid][k] = v
                     sock.sendall(bulk_string(eid).encode())

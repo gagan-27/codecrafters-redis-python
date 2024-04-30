@@ -57,3 +57,7 @@ def null_bulk_string() -> str:
 def simple_string(v: str) -> str:
 
     return f"+{v}\r\n"
+stream_entry_key_func = lambda e: tuple(map(int, e.split("-")))
+
+def simple_error(msg: str) -> str:
+    return f"-{msg}\r\n"
