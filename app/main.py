@@ -4,8 +4,10 @@ import socket
 import string
 import threading
 import sys
+from pathlib import Path
 from app import master_handler, slave_handler, slave_replication_handler
-from app.common import Role, State, encode_array
+from app.common import Role, State, Value, encode_array
+from app.rdb_reader import read_rdb
 from app.resp import RespHandler
 
 _state = State()
@@ -108,5 +110,12 @@ if __name__ == "__main__":
         _state.replid = get_replid()
         _state.dir, _state.dbfilename = get_dir_dbfilename()
     main() 
+    if _state.role == Role.MASTER:
+        if _state.dbfilename and _state.dir:
+            p = Path(_state.dir) / _state.dbfilename
+            if p.exists():
+                kvs = read_rdb(p)
+                for k, v in kvs.items():
+                    _state.kv[k] = Value(v=v)
 
     _state.threads[0].join()

@@ -37,6 +37,10 @@ def handle_msg(sock: socket.socket, state: State):
         match cmds[0].lower():
             case "ping":
                 sock.sendall("+PONG\r\n".encode())
+            case "keys":
+                with state.lock:
+                    if len(state.kv.keys()) > 0:
+                        sock.sendall(encode_array([list(state.kv.keys())[0]]).encode())
             case "config":
                 if cmds[1].lower() == "get":
                     if cmds[2].lower() == "dir":
