@@ -21,10 +21,17 @@ class Wait:
     deadline_ms: int
     return_sock: socket.socket
     dones: Set[socket.socket] = field(default_factory=set)
+@dataclass
+class StreamBlock:
+    key: str
+    entry: str
+    deadline_ms: int
+    return_sock: socket.socket
 class State:
     def __init__(self):
         self.kv: Dict[str, Value] = {}
         self.skv: Dict[str, Dict[str, Dict[str, str]]] = {}
+        self.blocks: List[StreamBlock] = []
         self.role = None
         # only for master
         self.replid = None

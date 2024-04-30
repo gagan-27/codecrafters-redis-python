@@ -4,9 +4,10 @@ import time
 from typing import Tuple
 from app.common import (
     State,
+    StreamBlock,
     Value,
     Wait,
-    bulk_string, #bc
+    bulk_string, 
     encode_array,
     null_bulk_string,
     simple_error,
@@ -14,17 +15,21 @@ from app.common import (
     stream_entry_key_func,
     ts_ms,
 )
-def handle_waits(state):
+def handle_waits(state: State):
     while True:
         with state.lock:
-            if len(state.waits) > 0:
-                for wait in state.waits[:]:
-                    if (
-                        len(wait.dones) >= wait.num_replicas
-                        or wait.deadline_ms < ts_ms()
-                    ):
-                        wait.return_sock.sendall(f":{len(wait.dones)}\r\n".encode())
-                        state.waits.remove(wait)
+            for wait in state.waits[:]:
+                if len(wait.dones) >= wait.num_replicas or wait.deadline_ms < ts_ms():
+                    wait.return_sock.sendall(f":{len(wait.dones)}\r\n".encode())
+                    state.waits.remove(wait)
+            # handle stream blocks, only handle expired case
+            for block in state.blocks[:]:
+                if block.deadline_ms < ts_ms():
+                    # expired
+                    block.return_sock.sendall(null_bulk_string().encode())
+                    state.blocks.remove(block)
+                    print(f"Resolved timeout block for {block.key} {block.entry}")
+            
         time.sleep(0.05)
 def handle_msg(sock: socket.socket, state: State):
     with state.lock:
@@ -206,7 +211,33 @@ def handle_msg(sock: socket.socket, state: State):
                     for k, v in zip(cmds[3::2], cmds[4::2]):
                         state.skv[sk][eid][k] = v
                     sock.sendall(bulk_string(eid).encode())
-            
+                    # not blocking current client, handle blocks
+                    for block in state.blocks[:]:
+                        if (
+                            block.key == sk
+                            and block.deadline_ms > ts_ms()
+                            and stream_entry_key_func(block.entry)
+                            < stream_entry_key_func(eid)
+                        ):
+                            # not expired, same key, larger new entity, yes
+                            flat = []
+                            for k, v in state.skv[sk][eid].items():
+                                flat.append(k)
+                                flat.append(v)
+                            encode_flat = encode_array(flat)
+                            one_entry_res = encode_array(
+                                [bulk_string(eid), encode_flat],
+                                bulk_encode=False,
+                            )
+                            entry_res = encode_array([one_entry_res], bulk_encode=False)
+                            key_res = encode_array(
+                                [bulk_string(sk), entry_res], bulk_encode=False
+                            )
+                            keys_res = encode_array([key_res], bulk_encode=False)
+                            print("block resolved: ", keys_res)
+                            block.return_sock.sendall(keys_res.encode())
+                            state.blocks.remove(block)
+                            print(f"Resolved block for {block.key} {block.entry}")
             case "xrange":
                 stream_key = cmds[1]
                 start_entry = cmds[2]
@@ -258,19 +289,35 @@ def handle_msg(sock: socket.socket, state: State):
 
                     sock.sendall(to_return.encode())
             case "xread":
-                assert cmds[1].lower() == "streams"
-                stream_key_start_pairs = extract_key_start_pairs(cmds[2:])
-                print(stream_key_start_pairs, " halu")
-                res = []
-                with state.lock:
-                    for stream_key, start_entry in stream_key_start_pairs:
-                        one_return = fetch_all_given_stream_key(
-                            state, stream_key, start_entry
+                if cmds[1].lower() == "block":
+                    deadline_ms = int(cmds[2]) + ts_ms()
+                    stream_key = cmds[4]
+                    start_entry = cmds[5]
+                    if len(cmds) > 6:
+                        print("lhwlhw guess wrong: ", cmds)
+                    with state.lock:
+                        state.blocks.append(
+                            StreamBlock(
+                                key=stream_key,
+                                entry=start_entry,
+                                deadline_ms=deadline_ms,
+                                return_sock=sock,
+                            )
                         )
-                        res.append(one_return)
-                    final_returns = encode_array(res, bulk_encode=False)
-                    print("XREAD return: ", final_returns)
-                    sock.sendall(final_returns.encode())
+                else:
+                    assert cmds[1].lower() == "streams"
+                    stream_key_start_pairs = extract_key_start_pairs(cmds[2:])
+                    res = []
+                    with state.lock:
+                        for stream_key, start_entry in stream_key_start_pairs:
+                            one_return = fetch_all_given_stream_key(
+                                state, stream_key, start_entry
+                            )
+                            res.append(one_return)
+                        final_returns = encode_array(res, bulk_encode=False)
+                        print("XREAD return: ", final_returns)
+                        sock.sendall(final_returns.encode())
+
             case cmd:
                 raise RuntimeError(f"{cmd} is not supported yet on master.")
 def extract_key_start_pairs(x: list[str]) -> list[Tuple[str, str]]:
