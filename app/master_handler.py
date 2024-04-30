@@ -40,7 +40,7 @@ def handle_msg(sock: socket.socket, state: State):
             case "keys":
                 with state.lock:
                     if len(state.kv.keys()) > 0:
-                        sock.sendall(encode_array([list(state.kv.keys())[0]]).encode())
+                        sock.sendall(encode_array(list(state.kv.keys())).encode())
             case "config":
                 if cmds[1].lower() == "get":
                     if cmds[2].lower() == "dir":
