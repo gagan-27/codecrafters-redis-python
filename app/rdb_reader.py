@@ -89,7 +89,7 @@ def read_rdb(path) -> Dict[str, str]:
             if op in _op_map:
                 _op_map[op](bf)
             else:
-                print(f"what?? {op}")
+                print(f"what??  {op}")
                 # for anything not implemented
                 break
 
