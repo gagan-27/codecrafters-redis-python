@@ -156,7 +156,9 @@ def handle_msg(sock: socket.socket, state: State):
             case "xadd":
                 sk = cmds[1]
                 eid = cmds[2]
-                if not stream_entry_key_func(eid) > (0, 0):
+                right_auto = eid.split("-")[1] == "*"
+                left_eid = int(eid.split("-")[0])
+                if not right_auto and not stream_entry_key_func(eid) > (0, 0):
                     sock.sendall(
                         simple_error(
                             "ERR The ID specified in XADD must be greater than 0-0"
@@ -166,18 +168,37 @@ def handle_msg(sock: socket.socket, state: State):
                 with state.lock:
                     if sk not in state.skv:
                         state.skv[sk] = {}
-                        state.skv[sk][eid] = {}
+                        if right_auto:
+                            eid = f"{left_eid}-1"
                     else:
                         # if existed key, check entryID
                         latest = max(state.skv[sk].keys(), key=stream_entry_key_func)
-                        if stream_entry_key_func(eid) <= stream_entry_key_func(latest):
-                            sock.sendall(
-                                simple_error(
-                                    "ERR The ID specified in XADD is equal or smaller than the target stream top item"
-                                ).encode()
-                            )
-                            continue
-                        state.skv[sk][eid] = {}
+                        if right_auto:
+                            (ll, lr) = stream_entry_key_func(latest)
+                            if left_eid < ll:
+                                sock.sendall(
+                                    simple_error(
+                                        "ERR The ID specified in XADD is equal or smaller than the target stream top item"
+                                    ).encode()
+                                )
+                                continue
+                            elif left_eid == ll:
+                                right_eid = lr + 1
+                                eid = f"{left_eid}-{right_eid}"
+                            else:
+                                # largest left eid, start from 0
+                                eid = f"{left_eid}-0"
+                        else:
+                            if stream_entry_key_func(eid) <= stream_entry_key_func(
+                                latest
+                            ):
+                                sock.sendall(
+                                    simple_error(
+                                        "ERR The ID specified in XADD is equal or smaller than the target stream top item"
+                                    ).encode()
+                                )
+                                continue
+                    state.skv[sk][eid] = {}
                     for k, v in zip(cmds[3::2], cmds[4::2]):
                         state.skv[sk][eid][k] = v
                     sock.sendall(bulk_string(eid).encode())
