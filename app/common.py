@@ -3,7 +3,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 from app.resp import RespHandler
 def ts_ms():
     return int(round(time.time() * 1000))
@@ -23,7 +23,7 @@ class Wait:
     dones: Set[socket.socket] = field(default_factory=set)
 class State:
     def __init__(self):
-        self.kv: Dict[str, Value] = {}
+        self.skv: Dict[str, Dict[str, Dict[str, str]]] = {}
         self.role = None
         # only for master
         self.replid = None

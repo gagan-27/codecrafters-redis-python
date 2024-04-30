@@ -44,8 +44,11 @@ def handle_msg(sock: socket.socket, state: State):
                         sock.sendall(encode_array(list(state.kv.keys())).encode())
             case "type":
                 with state.lock:
-                    if cmds[1] in state.kv:
+                    key = cmds[1]
+                    if key in state.kv:
                         sock.sendall(simple_string("string").encode())
+                    elif key in state.skv:
+                        sock.sendall(simple_string("stream").encode())
                     else:
 
                         sock.sendall(simple_string("none").encode())
@@ -148,6 +151,16 @@ def handle_msg(sock: socket.socket, state: State):
             case "echo":
                 v = cmds[1]
                 sock.sendall(bulk_string(v).encode())
+            case "xadd":
+                sk = cmds[1]
+                eid = cmds[2]
+                with state.lock:
+                    if sk not in state.skv:
+                        state.skv[sk] = {}
+                    state.skv[sk][eid] = {}
+                    for k, v in zip(cmds[3::2], cmds[4::2]):
+                        state.skv[sk][eid][k] = v
+                    sock.sendall(bulk_string(eid).encode())
             case cmd:
 
                 raise RuntimeError(f"{cmd} is not supported yet on master.")
