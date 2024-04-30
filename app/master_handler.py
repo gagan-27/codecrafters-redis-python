@@ -156,8 +156,10 @@ def handle_msg(sock: socket.socket, state: State):
             case "xadd":
                 sk = cmds[1]
                 eid = cmds[2]
-                right_auto = eid.split("-")[1] == "*"
-                left_eid = int(eid.split("-")[0])
+                # full auto is a special case of right auto with left as timestamp
+                full_auto = eid == "*"
+                right_auto = full_auto or eid.split("-")[1] == "*"
+                left_eid = int(eid.split("-")[0]) if not full_auto else ts_ms()
                 if not right_auto and not stream_entry_key_func(eid) > (0, 0):
                     sock.sendall(
                         simple_error(
@@ -169,7 +171,8 @@ def handle_msg(sock: socket.socket, state: State):
                     if sk not in state.skv:
                         state.skv[sk] = {}
                         if right_auto:
-                            eid = f"{left_eid}-1"
+                            right_eid = 0 if left_eid != 0 else 1
+                            eid = f"{left_eid}-{right_eid}"
                     else:
                         # if existed key, check entryID
                         latest = max(state.skv[sk].keys(), key=stream_entry_key_func)
