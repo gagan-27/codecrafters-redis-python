@@ -20,8 +20,7 @@ def handle_new_client(server_socket, state):
             else:
                 t = threading.Thread(target=slave_handler.handle_msg, args=(cs, state))
                 t.start()
-
-            state.threads.append(t)
+                state.threads.append(t)
 def main():
     server_socket = socket.create_server(
         ("localhost", _state.port), backlog=5, reuse_port=True
