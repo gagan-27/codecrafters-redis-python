@@ -8,6 +8,7 @@ from app.common import (
     bulk_string, #bc
     encode_array,
     null_bulk_string,
+    simple_string,
     ts_ms,
 )
 def handle_waits(state):
@@ -41,6 +42,13 @@ def handle_msg(sock: socket.socket, state: State):
                 with state.lock:
                     if len(state.kv.keys()) > 0:
                         sock.sendall(encode_array(list(state.kv.keys())).encode())
+            case "type":
+                with state.lock:
+                    if cmds[1] in state.kv:
+                        sock.sendall(simple_string("string").encode())
+                    else:
+
+                        sock.sendall(simple_string("none").encode())
             case "config":
                 if cmds[1].lower() == "get":
                     if cmds[2].lower() == "dir":

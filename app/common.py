@@ -39,16 +39,20 @@ class State:
         self.lock = threading.Lock()
         # only for slave
         self.slave_offset = 0
-        # only for master
+        # only for masters
         self.master_offset = 0
         # only for master
         self.waits: List[Wait] = []
+        self.dir: str = ""
+        self.dbfilename: str = ""
 def encode_array(v: List[str]) -> str:
     prefix = f"*{len(v)}\r\n"
     suffix = "".join([bulk_string(e) for e in v])
     return f"{prefix}{suffix}"
-def bulk_string(v: str | bytearray):
+def bulk_string(v: str | bytearray) -> str:
     return f"${len(v)}\r\n{v}\r\n"
-def null_bulk_string():
-
+def null_bulk_string() -> str:
     return "$-1\r\n"
+def simple_string(v: str) -> str:
+
+    return f"+{v}\r\n"
