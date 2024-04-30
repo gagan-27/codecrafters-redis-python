@@ -215,15 +215,18 @@ def handle_msg(sock: socket.socket, state: State):
                     arr = sorted(
                         state.skv[stream_key].keys(), key=stream_entry_key_func
                     )
-                    l = bisect.bisect_left(
-                        arr,
-                        stream_entry_key_func(start_entry),
-                        key=stream_entry_key_func,
-                    )
-                    if l == len(arr):
-                        sock.sendall(encode_array(res).encode())
-                    if l + 1 < len(arr) and arr[l + 1] == start_entry:
-                        l += 1
+                    if start_entry == "-":
+                        l = 0
+                    else:
+                        l = bisect.bisect_left(
+                            arr,
+                            stream_entry_key_func(start_entry),
+                            key=stream_entry_key_func,
+                        )
+                        if l == len(arr):
+                            sock.sendall(encode_array(res).encode())
+                        if l + 1 < len(arr) and arr[l + 1] == start_entry:
+                            l += 1
                     r = bisect.bisect_left(
                         arr, stream_entry_key_func(end_entry), key=stream_entry_key_func
                     )
