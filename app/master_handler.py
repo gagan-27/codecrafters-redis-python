@@ -1,5 +1,5 @@
 import socket
-
+import bisect
 import time
 from app.common import (
     State,
@@ -205,6 +205,48 @@ def handle_msg(sock: socket.socket, state: State):
                     for k, v in zip(cmds[3::2], cmds[4::2]):
                         state.skv[sk][eid][k] = v
                     sock.sendall(bulk_string(eid).encode())
-            case cmd:
+            
+            case "xrange":
+                stream_key = cmds[1]
+                start_entry = cmds[2]
+                end_entry = cmds[3]
+                res = []
+                with state.lock:
+                    arr = sorted(
+                        state.skv[stream_key].keys(), key=stream_entry_key_func
+                    )
+                    l = bisect.bisect_left(
+                        arr,
+                        stream_entry_key_func(start_entry),
+                        key=stream_entry_key_func,
+                    )
+                    if l == len(arr):
+                        sock.sendall(encode_array(res).encode())
+                    if l + 1 < len(arr) and arr[l + 1] == start_entry:
+                        l += 1
+                    r = bisect.bisect_left(
+                        arr, stream_entry_key_func(end_entry), key=stream_entry_key_func
+                    )
+                    if r + 1 < len(arr) and arr[r + 1] == end_entry:
+                        r += 1
+                    if r == len(arr):
+                        r = max(len(arr) - 1, 0)
+                    for i in range(l, r + 1):
+                        entry = arr[i]
+                        kvs = state.skv[stream_key][entry]
+                        flat = []
+                        for k, v in kvs.items():
+                            flat.append(k)
+                            flat.append(v)
+                        encode_flat = encode_array(flat)
+                        res.append(
+                            encode_array(
+                                [bulk_string(entry), encode_flat], bulk_encode=False
+                            )
+                        )
+                    to_return = encode_array(res, bulk_encode=False)
+                    print("XRANGE return: ", to_return)
 
+                    sock.sendall(to_return.encode())
+            case cmd:
                 raise RuntimeError(f"{cmd} is not supported yet on master.")

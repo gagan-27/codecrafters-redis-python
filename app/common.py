@@ -46,9 +46,12 @@ class State:
         self.waits: List[Wait] = []
         self.dir: str = ""
         self.dbfilename: str = ""
-def encode_array(v: List[str]) -> str:
+def encode_array(v: List[str], bulk_encode=True) -> str:
     prefix = f"*{len(v)}\r\n"
-    suffix = "".join([bulk_string(e) for e in v])
+    if bulk_encode:
+        suffix = "".join([bulk_string(e) for e in v])
+    else:
+        suffix = "".join(v)
     return f"{prefix}{suffix}"
 def bulk_string(v: str | bytearray) -> str:
     return f"${len(v)}\r\n{v}\r\n"
