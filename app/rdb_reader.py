@@ -1,6 +1,7 @@
 import io
 import struct
 from typing import Dict, Tuple
+from app.common import Value
 _rdb_kv = {}
 def handle_fa(bf: io.BufferedReader):
     bf.read(1)
@@ -61,17 +62,35 @@ def handle_fe(bf: io.BufferedReader):
     print(
         f"db_num { db_number} hash_table_len: {hash_table_len} expire_table_len: {expire_table_len}"
     )
-def handle_str_val(bf: io.BufferedReader):
+def handle_str_val(bf: io.BufferedReader, expire_ms=None):
     bf.read(1)
     k = read_string(bf)
     v = read_string(bf)
     print(f"KV: k: {k} v: {v}")
-    _rdb_kv[k] = v
+    _rdb_kv[k] = Value(v=v, ts=expire_ms)
 def handle_eof(bf: io.BufferedReader):
     bf.read(1)
     # skip 8 bytes checksum
     bf.read(8)
-_op_map = {0xFA: handle_fa, 0xFE: handle_fe, 0x00: handle_str_val, 0xFF: handle_eof}
+def handle_expire_ms(bf: io.BufferedReader):
+    bf.read(1)
+    # ts_ms as unsigned long
+    ts_ms = int(struct.unpack("L", bf.read(8))[0])
+    handle_str_val(bf, ts_ms)
+def handle_expire_s(bf: io.BufferedReader):
+    bf.read(1)
+    # ts_ms as unsigned long
+    ts_s = int(struct.unpack("I", bf.read(4))[0])
+
+    handle_str_val(bf, ts_s * 1000)
+_op_map = {
+    0xFA: handle_fa,
+    0xFE: handle_fe,
+    0x00: handle_str_val,
+    0xFF: handle_eof,
+    0xFC: handle_expire_ms,
+    0xFD: handle_expire_s,
+}
 def read_rdb(path) -> Dict[str, str]:
     with open(path, "rb") as f:
         bf = io.BufferedReader(f)
