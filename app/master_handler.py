@@ -256,5 +256,45 @@ def handle_msg(sock: socket.socket, state: State):
                     print("XRANGE return: ", to_return)
 
                     sock.sendall(to_return.encode())
+            case "xread":
+                assert cmds[1].lower() == "streams"
+                stream_key = cmds[2]
+                start_entry = cmds[3]
+                res = []
+                with state.lock:
+                    if stream_key not in state.skv:
+                        sock.sendall(encode_array([]).encode())
+                    arr = sorted(
+                        state.skv[stream_key].keys(), key=stream_entry_key_func
+                    )
+                    l = bisect.bisect_right(
+                        arr,
+                        stream_entry_key_func(start_entry),
+                        key=stream_entry_key_func,
+                    )
+                    if l == len(arr):
+                        sock.sendall(encode_array(res).encode())
+                    r = max(len(arr) - 1, 0)
+                    for i in range(l, r + 1):
+                        entry = arr[i]
+                        kvs = state.skv[stream_key][entry]
+                        flat = []
+                        for k, v in kvs.items():
+                            flat.append(k)
+                            flat.append(v)
+                        encode_flat = encode_array(flat)
+                        res.append(
+                            encode_array(
+                                [bulk_string(entry), encode_flat], bulk_encode=False
+                            )
+                        )
+                    to_return = encode_array(res, bulk_encode=False)
+                    # needs to add one extra wrap
+                    final_return = encode_array(
+                        [bulk_string(stream_key), to_return], bulk_encode=False
+                    )
+                    final_return = encode_array([final_return], bulk_encode=False)
+                    print("XREAD return: ", final_return)
+                    sock.sendall(final_return.encode())
             case cmd:
                 raise RuntimeError(f"{cmd} is not supported yet on master.")
