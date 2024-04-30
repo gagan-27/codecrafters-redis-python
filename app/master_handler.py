@@ -1,5 +1,5 @@
 import socket
-import threading
+
 import time
 from app.common import (
     State,
@@ -19,7 +19,6 @@ def handle_waits(state):
                         len(wait.dones) >= wait.num_replicas
                         or wait.deadline_ms < ts_ms()
                     ):
-                        print("handled one wait in thread")
                         wait.return_sock.sendall(f":{len(wait.dones)}\r\n".encode())
                         state.waits.remove(wait)
         time.sleep(0.05)
@@ -28,7 +27,6 @@ def handle_msg(sock: socket.socket, state: State):
         handler = state.sock_handler_map[sock]
     while True:
         # Msg handling
-        print("master wait for next msg")
         cmds = handler.next_msg()
         if not cmds:
             return
@@ -39,10 +37,19 @@ def handle_msg(sock: socket.socket, state: State):
         match cmds[0].lower():
             case "ping":
                 sock.sendall("+PONG\r\n".encode())
+            case "config":
+                if cmds[1].lower() == "get":
+                    if cmds[2].lower() == "dir":
+                        sock.sendall(encode_array(["dir", state.dir]).encode())
+                    elif cmds[2].lower() == "dbfilename":
+                        sock.sendall(
+                            encode_array(["dbfilename", state.dbfilename]).encode()
+                        )
+                    else:
+                        raise RuntimeError(f"Not valid config key {cmds[2]}")
             case "replconf":
                 if cmds[1].lower() == "ack":
                     slave_offset = int(cmds[2])
-                    print(f"One ACK from replica. offset: {slave_offset}")
                     with state.lock:
                         for wait in state.waits:
                             if (
@@ -51,13 +58,11 @@ def handle_msg(sock: socket.socket, state: State):
                             ):
                                 wait.dones.add(sock)
                                 if len(wait.dones) >= wait.num_replicas:
-                                    print("Pending one wait happy case.")
                                     wait.return_sock.sendall(
                                         f":{len(wait.dones)}\r\n".encode()
                                     )
                                     state.waits.remove(wait)
-                                    print("One wait happy case.")
-                                print("One ACK handled from replica.")
+                                    
                 else:
                     sock.sendall("+OK\r\n".encode())
             case "psync":

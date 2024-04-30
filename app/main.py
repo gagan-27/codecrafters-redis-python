@@ -88,6 +88,16 @@ def get_role():
 def get_replid():
     chrs = string.ascii_letters + string.digits
     return "".join(random.choices(chrs, k=40))
+def get_dir_dbfilename():
+    dir, dbfilename = None, None
+    if "--dir" in sys.argv:
+        idx = sys.argv.index("--dir")
+        dir = sys.argv[idx + 1]
+    if "--dbfilename" in sys.argv:
+        idx = sys.argv.index("--dbfilename")
+        dbfilename = sys.argv[idx + 1]
+
+    return dir, dbfilename
 if __name__ == "__main__":
     _state.role, _state.master_addr, _state.master_port = get_role()
     _state.port = get_port()
@@ -95,8 +105,8 @@ if __name__ == "__main__":
     )
     
     if _state.role == Role.MASTER:
-        replid = get_replid()
-        _state.replid = replid
+        _state.replid = get_replid()
+        _state.dir, _state.dbfilename = get_dir_dbfilename()
     main() 
 
     _state.threads[0].join()
