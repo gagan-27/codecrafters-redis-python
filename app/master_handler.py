@@ -296,6 +296,12 @@ def handle_msg(sock: socket.socket, state: State):
                         deadline_ms = int(cmds[2]) + ts_ms()        
                     stream_key = cmds[4]
                     start_entry = cmds[5]
+                    if start_entry == "$":
+                        # get latest entry
+                        start_entry = max(
+                            state.skv[stream_key].keys(), key=stream_entry_key_func
+                        )
+
                     if len(cmds) > 6:
                         print("lhwlhw guess wrong: ", cmds)
                     with state.lock:
