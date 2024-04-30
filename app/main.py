@@ -116,4 +116,4 @@ if __name__ == "__main__":
             if p.exists():
                 _state.kv = read_rdb(p)
                 
-    _state.threads[0].join()
+    _state.threads[0].join() #done
