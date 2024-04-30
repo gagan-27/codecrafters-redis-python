@@ -273,6 +273,12 @@ def handle_msg(sock: socket.socket, state: State):
                     sock.sendall(final_returns.encode())
             case cmd:
                 raise RuntimeError(f"{cmd} is not supported yet on master.")
+def extract_key_start_pairs(x: list[str]) -> list[Tuple[str, str]]:
+    res = []
+    e = len(x) // 2
+    for key, start in zip(x[0:e], x[e:]):
+        res.append((key, start))
+    return res
 def fetch_all_given_stream_key(state, stream_key, start_entry):
     res_entry_list = []
     arr = sorted(state.skv[stream_key].keys(), key=stream_entry_key_func)
