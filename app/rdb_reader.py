@@ -101,7 +101,7 @@ def read_rdb(path) -> Dict[str, str]:
         while True:
             op = bf.peek(1)
             if not op:
-                print("EOF")
+                print("EOF")#done
                 break
             if len(op) > 1:
                 op = op[0]
