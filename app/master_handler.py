@@ -227,13 +227,18 @@ def handle_msg(sock: socket.socket, state: State):
                             sock.sendall(encode_array(res).encode())
                         if l + 1 < len(arr) and arr[l + 1] == start_entry:
                             l += 1
-                    r = bisect.bisect_left(
-                        arr, stream_entry_key_func(end_entry), key=stream_entry_key_func
-                    )
-                    if r + 1 < len(arr) and arr[r + 1] == end_entry:
-                        r += 1
-                    if r == len(arr):
+                    if end_entry == "+":
                         r = max(len(arr) - 1, 0)
+                    else:
+                        r = bisect.bisect_left(
+                            arr,
+                            stream_entry_key_func(end_entry),
+                            key=stream_entry_key_func,
+                        )
+                        if r + 1 < len(arr) and arr[r + 1] == end_entry:
+                            r += 1
+                        if r == len(arr):
+                            r = max(len(arr) - 1, 0)
                     for i in range(l, r + 1):
                         entry = arr[i]
                         kvs = state.skv[stream_key][entry]
