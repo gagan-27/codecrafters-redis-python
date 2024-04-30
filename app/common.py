@@ -23,6 +23,7 @@ class Wait:
     dones: Set[socket.socket] = field(default_factory=set)
 class State:
     def __init__(self):
+        self.kv: Dict[str, Value] = {}
         self.skv: Dict[str, Dict[str, Dict[str, str]]] = {}
         self.role = None
         # only for master

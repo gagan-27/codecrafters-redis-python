@@ -45,7 +45,7 @@ def handle_msg(sock: socket.socket, state: State):
             case "type":
                 with state.lock:
                     key = cmds[1]
-                    if key in state.skv:
+                    if key in state.kv:
                         sock.sendall(simple_string("string").encode())
                     elif key in state.skv:
                         sock.sendall(simple_string("stream").encode())
