@@ -24,7 +24,7 @@ def handle_waits(state: State):
                     state.waits.remove(wait)
             # handle stream blocks, only handle expired case
             for block in state.blocks[:]:
-                if block.deadline_ms < ts_ms():
+                if block.deadline_ms != -1 and block.deadline_ms < ts_ms():
                     # expired
                     block.return_sock.sendall(null_bulk_string().encode())
                     state.blocks.remove(block)
@@ -215,7 +215,7 @@ def handle_msg(sock: socket.socket, state: State):
                     for block in state.blocks[:]:
                         if (
                             block.key == sk
-                            and block.deadline_ms > ts_ms()
+                            and (block.deadline_ms == -1 or block.deadline_ms > ts_ms())
                             and stream_entry_key_func(block.entry)
                             < stream_entry_key_func(eid)
                         ):
@@ -290,7 +290,10 @@ def handle_msg(sock: socket.socket, state: State):
                     sock.sendall(to_return.encode())
             case "xread":
                 if cmds[1].lower() == "block":
-                    deadline_ms = int(cmds[2]) + ts_ms()
+                    if int(cmds[2]) == 0:
+                        deadline_ms = -1
+                    else:
+                        deadline_ms = int(cmds[2]) + ts_ms()        
                     stream_key = cmds[4]
                     start_entry = cmds[5]
                     if len(cmds) > 6:
