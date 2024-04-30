@@ -114,8 +114,6 @@ if __name__ == "__main__":
         if _state.dbfilename and _state.dir:
             p = Path(_state.dir) / _state.dbfilename
             if p.exists():
-                kvs = read_rdb(p)
-                for k, v in kvs.items():
-                    _state.kv[k] = Value(v=v)
-
+                _state.kv = read_rdb(p)
+                
     _state.threads[0].join()
