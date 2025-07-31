@@ -2,7 +2,7 @@ import socket
 import bisect
 import time
 from typing import Tuple
-from app.common import (
+from common import (
     State,
     StreamBlock,
     Value,

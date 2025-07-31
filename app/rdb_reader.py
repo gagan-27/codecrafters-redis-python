@@ -1,7 +1,7 @@
 import io
 import struct
 from typing import Dict, Tuple
-from app.common import Value
+from common import Value
 _rdb_kv = {}
 def handle_fa(bf: io.BufferedReader):
     bf.read(1)

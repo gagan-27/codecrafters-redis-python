@@ -1,5 +1,5 @@
 import socket
-from app.common import State, Value, bulk_string, encode_array, null_bulk_string, ts_ms
+from common import State, Value, bulk_string, encode_array, null_bulk_string, ts_ms
 def handle_msg(sock: socket.socket, state: State):
     with state.lock:
         handler = state.sock_handler_map[sock]

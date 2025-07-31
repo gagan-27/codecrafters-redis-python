@@ -4,11 +4,12 @@ import socket
 import string
 import threading
 import sys
-from pathlib import Path
-from app import master_handler, slave_handler, slave_replication_handler
-from app.common import Role, State, Value, encode_array
-from app.rdb_reader import read_rdb
-from app.resp import RespHandler
+import master_handler
+import slave_handler
+import slave_replication_handler
+from common import Role, State, Value, encode_array
+from rdb_reader import read_rdb
+from resp import RespHandler
 
 _state = State()
 def handle_new_client(server_socket, state):
@@ -25,7 +26,7 @@ def handle_new_client(server_socket, state):
             state.threads.append(t)
 def main():
     server_socket = socket.create_server(
-        ("localhost", _state.port), backlog=5, reuse_port=True
+        ("0.0.0.0", _state.port), backlog=5
     )
     with _state.lock:
         _state.sock_handler_map[server_socket] = RespHandler(server_socket)

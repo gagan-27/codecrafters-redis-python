@@ -1,5 +1,5 @@
 import socket
-from app.common import Role, State, Value, encode_array, ts_ms
+from common import Role, State, Value, encode_array, ts_ms
 def handle_msg(sock: socket.socket, state: State):
     assert state.role == Role.SLAVE
     with state.lock:
